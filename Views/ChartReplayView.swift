@@ -121,19 +121,19 @@ struct ChartReplayView_Previews: PreviewProvider {
         // Create sample data
         let data = (0..<100).map { i -> ChartDataPoint in
             let date = Calendar.current.date(byAdding: .hour, value: i, to: Date())!
-            let open = 100.0 + Double.random(in: -5...5)
-            let close = open + Double.random(in: -3...3)
-            let high = max(open, close) + Double.random(in: 0...2)
-            let low = min(open, close) - Double.random(in: 0...2)
+            let open = 100.0 + Double(i) * 0.5
+            let close = open + sin(Double(i) / 10)
+            let high = max(open, close) + 1
+            let low = min(open, close) - 1
             return ChartDataPoint(
                 time: date,
                 open: open,
                 high: high,
                 low: low,
                 close: close,
-                volume: Double.random(in: 100...1000),
-                bidVolume: Double.random(in: 50...500),
-                askVolume: Double.random(in: 50...500)
+                volume: 500,
+                bidVolume: 250,
+                askVolume: 250
             )
         }
         
