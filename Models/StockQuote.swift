@@ -1,4 +1,3 @@
-import SwiftUI
 import Foundation
 
 protocol QuoteData: Identifiable {
@@ -14,22 +13,4 @@ struct StockQuote: QuoteData, Identifiable {
     let name: String
     let price: Double
     let changePercent: Double
-}
-
-@main
-struct FinancialDashboardApp: App {
-    @StateObject private var vm = DashboardViewModel(
-        services: [
-            AlphaVantageService(apiKey: Secrets.alphaVantageKey),
-            CoinGeckoService()
-        ])
-    
-    var body: some Scene {
-        WindowGroup {
-            NavigationStack {
-                DashboardView()
-                    .environmentObject(vm)
-            }
-        }
-    }
 }

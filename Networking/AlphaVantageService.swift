@@ -10,41 +10,83 @@ final class AlphaVantageService: APIService {
     init(apiKey: String) { self.apiKey = apiKey }
 
     func latestQuotes() async throws -> [any QuoteData] {
-        // Mock implementation - would fetch from API in production
-        return [
-            StockQuote(symbol: "AAPL", name: "Apple Inc.", price: 187.32, changePercent: 1.2),
-            StockQuote(symbol: "MSFT", name: "Microsoft Corp.", price: 378.85, changePercent: 0.8),
-            StockQuote(symbol: "AMZN", name: "Amazon.com Inc.", price: 184.22, changePercent: -0.5),
-            StockQuote(symbol: "NVDA", name: "NVIDIA Corp.", price: 947.50, changePercent: 2.3),
-            StockQuote(symbol: "GOOG", name: "Alphabet Inc.", price: 167.28, changePercent: 0.3)
-        ]
+        var quotes: [StockQuote] = []
+
+        for symbol in symbols {
+            var components = URLComponents(string: "https://www.alphavantage.co/query")!
+            components.queryItems = [
+                URLQueryItem(name: "function", value: "GLOBAL_QUOTE"),
+                URLQueryItem(name: "symbol", value: symbol),
+                URLQueryItem(name: "apikey", value: apiKey)
+            ]
+
+            struct GlobalQuote: Decodable {
+                let symbol: String
+                let price: String
+                let changePercent: String
+
+                enum CodingKeys: String, CodingKey {
+                    case symbol = "01. symbol"
+                    case price = "05. price"
+                    case changePercent = "10. change percent"
+                }
+            }
+
+            struct Response: Decodable {
+                let globalQuote: GlobalQuote
+
+                enum CodingKeys: String, CodingKey {
+                    case globalQuote = "Global Quote"
+                }
+            }
+
+            do {
+                let result = try await NetworkClient.shared.fetch(components.url!, as: Response.self)
+                if let price = Double(result.globalQuote.price),
+                   let change = Double(result.globalQuote.changePercent.trimmingCharacters(in: CharacterSet(charactersIn: "%"))) {
+                    let quote = StockQuote(symbol: symbol, name: symbol, price: price, changePercent: change)
+                    quotes.append(quote)
+                }
+            } catch {
+                // Skip symbols that fail to decode
+                continue
+            }
+        }
+
+        return quotes
     }
 
     func getChartData(for symbol: String) async throws -> [ChartDataPoint] {
-        // In a real app, we would fetch this from the API
-        // For demo purposes, generate random OHLC data
-        let calendar = Calendar.current
-        var chartData: [ChartDataPoint] = []
-        let endDate = Date()
-        
-        // Generate daily data for 30 days
-        for day in 0..<30 {
-            guard let date = calendar.date(byAdding: .day, value: -day, to: endDate) else { continue }
-            
-            // Generate price based on random walk
-            let basePrice = Double.random(in: 100...200)
-            let range = basePrice * 0.02 // 2% daily range
-            
-            let open = basePrice
-            let high = open + Double.random(in: 0...range)
-            let low = open - Double.random(in: 0...range)
-            let close = Double.random(in: low...high)
-            
-            // Volume based on symbol
-            let volume = Double.random(in: 1_000_000...10_000_000)
-            let bidVolume = volume * Double.random(in: 0.4...0.6)
-            let askVolume = volume - bidVolume
-            
+        var components = URLComponents(string: "https://www.alphavantage.co/query")!
+        components.queryItems = [
+            URLQueryItem(name: "function", value: "TIME_SERIES_DAILY"),
+            URLQueryItem(name: "symbol", value: symbol),
+            URLQueryItem(name: "apikey", value: apiKey),
+            URLQueryItem(name: "outputsize", value: "compact")
+        ]
+
+        struct Response: Decodable {
+            let series: [String: [String: String]]
+
+            enum CodingKeys: String, CodingKey {
+                case series = "Time Series (Daily)"
+            }
+        }
+
+        let result = try await NetworkClient.shared.fetch(components.url!, as: Response.self)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        var points: [ChartDataPoint] = []
+        for (dateString, values) in result.series {
+            guard let date = formatter.date(from: dateString),
+                  let open = Double(values["1. open"] ?? ""),
+                  let high = Double(values["2. high"] ?? ""),
+                  let low = Double(values["3. low"] ?? ""),
+                  let close = Double(values["4. close"] ?? ""),
+                  let volume = Double(values["5. volume"] ?? values["6. volume"] ?? "")
+            else { continue }
+
             let point = ChartDataPoint(
                 time: date,
                 open: open,
@@ -52,15 +94,13 @@ final class AlphaVantageService: APIService {
                 low: low,
                 close: close,
                 volume: volume,
-                bidVolume: bidVolume,
-                askVolume: askVolume
+                bidVolume: 0,
+                askVolume: 0
             )
-            
-            chartData.append(point)
+            points.append(point)
         }
-        
-        // Sort by date, oldest first
-        return chartData.sorted(by: { $0.time < $1.time })
+
+        return points.sorted { $0.time < $1.time }
     }
 
     var name: String { "Alpha Vantage" }
